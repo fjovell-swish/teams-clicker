@@ -30,6 +30,8 @@ repos:
     rev: v1.20.2
     hooks:
       - id: mypy
+        # mypy's own --exclude doesn't apply to files pre-commit passes explicitly
+        exclude: ^tests/
         args: [--ignore-missing-imports, --exclude, tests, --exclude, .venv]
         additional_dependencies:
           - playwright

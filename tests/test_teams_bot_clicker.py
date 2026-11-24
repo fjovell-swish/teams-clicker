@@ -184,7 +184,8 @@ def test_message_key_uses_timestamp_in_id(page: Page) -> None:
 
 def test_message_key_falls_back_to_hashed_text(page: Page) -> None:
     page.set_content(
-        "<div><p>Same card</p><button>Sí</button></div><div><p>Same card</p><button>Sí</button></div>"
+        "<div><p>Same card</p><button>Sí</button></div>"
+        "<div><p>Same card</p><button>Sí</button></div>"
     )
     buttons = page.get_by_role("button")
 
@@ -411,7 +412,9 @@ def test_open_chat_from_list_missing_chat(page: Page, chat_list_html: str) -> No
 def test_open_chat_from_search_picks_suggestion(page: Page) -> None:
     page.set_content("""
         <input id="search" autofocus>
-        <div role="listbox"><div role="option" onclick="window.opened = 'Bob'">Bob Smith</div></div>
+        <div role="listbox">
+          <div role="option" onclick="window.opened = 'Bob'">Bob Smith</div>
+        </div>
     """)
 
     assert teams_bot_clicker.open_chat_from_search(page, "Bob") is True
@@ -621,7 +624,7 @@ def test_run_watch_ignores_card_on_screen(
 ) -> None:
     serve(
         '<div role="tree">Chats</div><div data-mid="1764000000001"><div class="ac-adaptiveCard">'
-        "<button onclick=\"window.clicked = true\">Sí</button></div></div>"
+        '<button onclick="window.clicked = true">Sí</button></div></div>'
     )
     run_args.watch = True
     run_args.max_clicks = 0  # stop the never-ending watch loop straight away
