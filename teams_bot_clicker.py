@@ -33,10 +33,14 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from playwright.sync_api import BrowserContext, Locator, Page, sync_playwright
+from playwright.sync_api import BrowserContext
+from playwright.sync_api import Locator
+from playwright.sync_api import Page
+from playwright.sync_api import Playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import ViewportSize
+from playwright.sync_api import sync_playwright
 
 log = logging.getLogger("teams_bot_clicker")
 
@@ -56,7 +60,7 @@ DEFAULT_IDLE_SECONDS = 30.0  # how long to wait for the bot's next card before s
 DEFAULT_MAX_CLICKS = 50
 # Adaptive cards (what bots send) are rendered with these class names.
 CARD_BUTTON_SELECTOR = ".ac-adaptiveCard button, .ac-adaptiveCard [role='button']"
-VIEWPORT: dict[str, int] = {"width": 1600, "height": 1000}
+VIEWPORT = ViewportSize(width=1600, height=1000)
 SUPPORTED_BROWSERS = ("chromium", "firefox")
 MAX_DEBUG_ITEMS = 30
 DESKTOP_PROMPT_TIMEOUT_MS = 5 * 1000
@@ -90,7 +94,9 @@ FALLBACK_ANCESTOR_LEVELS = 8
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--chat", help="Chat name as shown in the Teams chat list (e.g. Albert)")
     parser.add_argument(
         "--chat-url",
@@ -100,9 +106,11 @@ def parse_args() -> argparse.Namespace:
         "--button",
         action="append",
         default=[],
-        help="Only click buttons with this exact label (repeatable). Default: any button on a card",
+        help="Only click buttons with this exact label (repeatable). Default: any card button",
     )
-    parser.add_argument("--button-regex", action="append", default=[], help="Only click labels matching this regex")
+    parser.add_argument(
+        "--button-regex", action="append", default=[], help="Only click labels matching this regex"
+    )
     parser.add_argument(
         "--idle-timeout",
         type=float,
@@ -118,10 +126,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="Never stop: ignore the card on screen and click buttons on every new card that arrives",
+        help="Never stop: ignore the card on screen, click a button on every new card",
     )
-    parser.add_argument("--close-popups", action="store_true", help="Close tabs opened by clicked buttons")
-    parser.add_argument("--headless", action="store_true", help="Run without a window (only once logged in)")
+    parser.add_argument(
+        "--close-popups", action="store_true", help="Close tabs opened by clicked buttons"
+    )
+    parser.add_argument(
+        "--headless", action="store_true", help="Run without a window (only once logged in)"
+    )
     parser.add_argument("--browser", choices=SUPPORTED_BROWSERS, default="chromium")
     parser.add_argument(
         "--profile-dir",
@@ -163,11 +175,11 @@ def save_state(path: Path, handled: set[str]) -> None:
 # --- browser setup ---------------------------------------------------------------------
 
 
-def launch(playwright: Any, args: argparse.Namespace) -> BrowserContext:
+def launch(playwright: Playwright, args: argparse.Namespace) -> BrowserContext:
     # Profiles are not interchangeable between browser engines, so keep one per browser.
     profile_dir = args.profile_dir or Path(f"{DEFAULT_PROFILE_DIR}-{args.browser}")
     profile_dir.mkdir(parents=True, exist_ok=True)
-    browser_type = getattr(playwright, args.browser)
+    browser_type = {"chromium": playwright.chromium, "firefox": playwright.firefox}[args.browser]
     log.info("Launching %s with profile %s", args.browser, profile_dir)
     context = browser_type.launch_persistent_context(
         user_data_dir=str(profile_dir),
@@ -205,7 +217,9 @@ def open_teams(context: BrowserContext, headless: bool, url: str) -> Page:
         page.get_by_role("tree").first.wait_for(timeout=timeout)
     except PlaywrightTimeoutError as exc:
         if LOGIN_HOST in page.url:
-            raise RuntimeError("Teams session expired: rerun without --headless and sign in again") from exc
+            raise RuntimeError(
+                "Teams session expired: rerun without --headless and sign in again"
+            ) from exc
         raise
     log.info("Teams loaded")
     return page
@@ -247,7 +261,9 @@ def open_chat(page: Page, chat_name: str) -> None:
         log.info("Opened chat %s via the go-to-chat shortcut", chat_name)
     else:
         log_tree_items(page)
-        raise RuntimeError(f"Chat {chat_name!r} not found in the chat list or the search; try --chat-url")
+        raise RuntimeError(
+            f"Chat {chat_name!r} not found in the chat list or the search; try --chat-url"
+        )
     page.wait_for_timeout(CHAT_LOAD_PAUSE_MS)
 
 
@@ -296,7 +312,7 @@ def log_tree_items(page: Page) -> None:
 
 
 def find_buttons(page: Page, patterns: list[re.Pattern[str]]) -> Locator:
-    """Buttons to consider, in page order: those matching the labels, or any adaptive-card button."""
+    """Buttons to consider, in page order: those matching the labels, else any card button."""
     if not patterns:
         return page.locator(CARD_BUTTON_SELECTOR)
     # get_by_role pierces shadow DOM; adaptive card actions are real <button>s.
@@ -308,9 +324,9 @@ def find_buttons(page: Page, patterns: list[re.Pattern[str]]) -> Locator:
 
 def message_key(button: Locator) -> str:
     """Stable id of the message (card) a button belongs to."""
-    key = button.evaluate(MESSAGE_KEY_JS, FALLBACK_ANCESTOR_LEVELS)
+    key = str(button.evaluate(MESSAGE_KEY_JS, FALLBACK_ANCESTOR_LEVELS))
     if key.startswith("text:"):
-        text = key[len("text:") :][:MAX_TEXT_KEY_CHARS]
+        text = key.removeprefix("text:")[:MAX_TEXT_KEY_CHARS]
         key = "text:" + hashlib.sha1(text.encode()).hexdigest()
     return key
 
@@ -322,12 +338,18 @@ def newest_card(page: Page, patterns: list[re.Pattern[str]]) -> tuple[str, list[
     if count == 0:
         return None
     newest_message = message_key(buttons.nth(count - 1))
-    card_buttons = [buttons.nth(index) for index in range(count) if message_key(buttons.nth(index)) == newest_message]
+    card_buttons = [
+        buttons.nth(index)
+        for index in range(count)
+        if message_key(buttons.nth(index)) == newest_message
+    ]
     return newest_message, card_buttons
 
 
-def next_button(page: Page, patterns: list[re.Pattern[str]], handled: set[str]) -> tuple[str, Locator] | None:
-    """First enabled button on the newest card, unless that card was already clicked (one click per card)."""
+def next_button(
+    page: Page, patterns: list[re.Pattern[str]], handled: set[str]
+) -> tuple[str, Locator] | None:
+    """First enabled button on the newest card, unless it was already clicked (one per card)."""
     card = newest_card(page, patterns)
     if card is None or card[0] in handled:
         return None
@@ -372,7 +394,9 @@ def click_cards(
     log.warning("Stopped after reaching --max-clicks (%s)", max_clicks)
 
 
-def ignore_current_card(page: Page, patterns: list[re.Pattern[str]], handled: set[str], state_file: Path) -> None:
+def ignore_current_card(
+    page: Page, patterns: list[re.Pattern[str]], handled: set[str], state_file: Path
+) -> None:
     """For --watch: treat buttons already on screen as handled, so only new cards get clicked."""
     card = newest_card(page, patterns)
     if card is None:
@@ -402,7 +426,9 @@ def run(context: BrowserContext, args: argparse.Namespace) -> None:
         log.info("Watching for new cards (Ctrl+C to stop)")
         click_cards(context, page, patterns, handled, args.state_file, None, args.max_clicks)
     else:
-        click_cards(context, page, patterns, handled, args.state_file, args.idle_timeout, args.max_clicks)
+        click_cards(
+            context, page, patterns, handled, args.state_file, args.idle_timeout, args.max_clicks
+        )
 
 
 def main() -> None:

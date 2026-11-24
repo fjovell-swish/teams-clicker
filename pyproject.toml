@@ -32,6 +32,12 @@ build-backend = "setuptools.build_meta"
 [tool.autoflake]
 recursive = true
 
+[tool.isort]
+# Compatible with black; one import per line (the style reorder-python-imports used).
+profile = "black"
+line_length = 99
+force_single_line = true
+
 [tool.mypy]
 files = "."
 ignore_missing_imports = true
@@ -43,6 +49,11 @@ exclude = [
 [tool.coverage.run]
 plugins = [
     "covdefaults",
+]
+# Playwright's sync API runs on greenlets; without this, lines after browser calls look unrun.
+concurrency = [
+    "greenlet",
+    "thread",
 ]
 omit = []
 

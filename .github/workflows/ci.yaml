@@ -29,6 +29,9 @@ jobs:
           pip install -r test-requirements.txt
           pip install setuptools
 
+      - name: Install Playwright browser
+        run: python -m playwright install --with-deps chromium
+
       - name: Run Tests
         run: python -m pytest -n 4 --cov --cov-report term-missing
 
