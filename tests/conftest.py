@@ -20,9 +20,25 @@ def playwright() -> Iterator[Playwright]:
         yield playwright
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--browser",
+        action="append",
+        choices=teams_bot_clicker.SUPPORTED_BROWSERS,
+        help="Browser to run the tests in (repeatable). Default: all supported browsers",
+    )
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Run every test that uses a browser once per browser (chromium, firefox)."""
+    if "browser_name" in metafunc.fixturenames:
+        names = metafunc.config.getoption("browser") or teams_bot_clicker.SUPPORTED_BROWSERS
+        metafunc.parametrize("browser_name", names, scope="session")
+
+
 @pytest.fixture(scope="session")
-def browser(playwright: Playwright) -> Iterator[Browser]:
-    browser = playwright.chromium.launch()
+def browser(playwright: Playwright, browser_name: str) -> Iterator[Browser]:
+    browser = playwright[browser_name].launch()
     yield browser
     browser.close()
 

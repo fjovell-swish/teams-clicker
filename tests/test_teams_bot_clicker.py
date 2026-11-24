@@ -559,16 +559,16 @@ def test_save_trace_writes_zip(
 
 
 def test_launch_uses_a_profile_per_browser(
-    playwright: Playwright, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    playwright: Playwright, browser_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(teams_bot_clicker, "DEFAULT_PROFILE_DIR", tmp_path / "profile")
-    args = argparse.Namespace(browser="chromium", headless=True, profile_dir=None)
+    args = argparse.Namespace(browser=browser_name, headless=True, profile_dir=None)
 
     context = teams_bot_clicker.launch(playwright, args)
     context.tracing.stop_chunk()
     context.close()
 
-    assert (tmp_path / "profile-chromium").is_dir()
+    assert (tmp_path / f"profile-{browser_name}").is_dir()
 
 
 # --- run (end to end against a fake Teams) ---------------------------------------------
